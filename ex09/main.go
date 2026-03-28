@@ -20,16 +20,47 @@ func main() {
 			continue
 		}
 		err = ValidateEmployee(emp)
+		message := fmt.Sprintf("record %d: %+v", count, emp)
 		if err != nil {
-			if errors.Is(err, ErrInvalidID) {
-				fmt.Printf("record %d: %+v error: invalid ID: %s\n", count, emp, emp.ID)
-			} else {
-				fmt.Printf("record %d: %+v error: %v\n", count, emp, err)
+			switch err := err.(type) {
+			case interface{ Unwrap() []error }:
+				allErrors := err.Unwrap()
+				var messages []string
+				for _, e := range allErrors {
+					messages = append(messages, processError(e, emp))
+				}
+				message = message + " allErrors: " + strings.Join(messages, ", ")
+			default:
+				message = message + " error: " + processError(err, emp)
 			}
-			continue
 		}
-		fmt.Printf("record %d: %+v\n", count, emp)
+
+		fmt.Println(message)
 	}
+}
+
+func processError(err error, emp Employee) string {
+	var efe EmptyFieldErr
+	if errors.Is(err, ErrInvalidID) {
+		return fmt.Sprintf("error: invalid ID: %s", emp.ID)
+	} else if errors.As(err, &efe) {
+		return fmt.Sprintf("error empty field: %s", efe.FieldName)
+	} else {
+		return fmt.Sprintf("%+v", err)
+	}
+}
+
+type EmptyFieldErr struct {
+	FieldName string
+	Err       error
+}
+
+func (efe EmptyFieldErr) Error() string {
+	return fmt.Sprintf("%s is empty", efe.FieldName)
+}
+
+func (efe EmptyFieldErr) Unwrap() error {
+	return efe.Err
 }
 
 var ErrInvalidID = errors.New("invalid id")
@@ -91,20 +122,40 @@ var (
 )
 
 func ValidateEmployee(e Employee) error {
+	var errs []error
 	if len(e.ID) == 0 {
-		return errors.New("missing ID")
+		errs = append(errs, EmptyFieldErr{
+			Err:       errors.New("missing ID"),
+			FieldName: "ID",
+		})
 	}
 	if !validID.MatchString(e.ID) {
-		return ErrInvalidID
+		errs = append(errs, ErrInvalidID)
 	}
 	if len(e.FirstName) == 0 {
-		return errors.New("missing FirstName")
+		errs = append(errs, EmptyFieldErr{
+			Err:       errors.New(""),
+			FieldName: "FirstName",
+		})
 	}
 	if len(e.LastName) == 0 {
-		return errors.New("missing LastName")
+		errs = append(errs, EmptyFieldErr{
+			Err:       errors.New(""),
+			FieldName: "LastName",
+		})
 	}
 	if len(e.Title) == 0 {
-		return errors.New("missing Title")
+		errs = append(errs, EmptyFieldErr{
+			Err:       errors.New(""),
+			FieldName: "Title",
+		})
 	}
-	return nil
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errs[0]
+	default:
+		return errors.Join(errs...)
+	}
 }
