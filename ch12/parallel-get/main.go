@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -12,10 +13,11 @@ type result struct {
 	latency time.Duration
 }
 
-func get(url string, ch chan<- result) {
+func get(ctx context.Context, url string, ch chan<- result) {
 	start := time.Now()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 
-	if resp, err := http.Get(url); err != nil {
+	if resp, err := http.DefaultClient.Do(req); err != nil {
 		ch <- result{url, err, 0}
 	} else {
 		t := time.Since(start).Round(time.Millisecond)
@@ -25,7 +27,7 @@ func get(url string, ch chan<- result) {
 }
 
 func main() {
-	stopper := time.After(3 * time.Second)
+
 	results := make(chan result)
 	list := []string{
 		"https://amazon.com",
@@ -35,21 +37,20 @@ func main() {
 		"http://localhost:8080",
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+
+	defer cancel()
+
 	for _, url := range list {
-		go get(url, results)
+		go get(ctx, url, results)
 	}
 
 	for range list {
-
-		select {
-		case r := <-results:
-			if r.err != nil {
-				log.Printf("%-20s %s\n", r.url, r.err)
-			} else {
-				log.Printf("%-20s %s\n", r.url, r.latency)
-			}
-		case <-stopper:
-			log.Fatal("timeout")
+		r := <-results
+		if r.err != nil {
+			log.Printf("%-20s %s\n", r.url, r.err)
+		} else {
+			log.Printf("%-20s %s\n", r.url, r.latency)
 		}
 	}
 
