@@ -1,14 +1,23 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 )
 
+const url = "https://dummyjson.com"
+
+type todo struct {
+	Id        int    `json:"id"`
+	Title     string `json:"todo"`
+	Completed bool   `json:"completed"`
+}
+
 func main() {
-	resp, err := http.Get("http://localhost:8080/" + os.Args[1])
+	resp, err := http.Get(url + "/todos/1")
 
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
@@ -25,8 +34,13 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Println(string(body))
-
+		var item todo
+		err = json.Unmarshal(body, &item)
+		if err != nil {
+			fmt.Fprint(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Printf("%#v\n", item)
 	}
 
 }
