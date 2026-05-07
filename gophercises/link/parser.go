@@ -7,7 +7,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-// Link represents a lik (<a href="...">) in an HTML
+// Link represents a link (<a href="...">) in an HTML
 // document.
 type Link struct {
 	Href string
@@ -24,22 +24,22 @@ func getHref(node *html.Node) string {
 }
 
 func getText(node *html.Node) string {
-	if node == nil || node.Data == "scripts" || node.Data == "style" {
+	if node.Type == html.TextNode {
+		return node.Data
+	}
+	if node.Type != html.ElementNode {
 		return ""
 	}
-	if node.Type == html.TextNode {
-		return strings.TrimSpace(node.Data)
-	}
-	var text []string
+	var text string
 	for ch := node.FirstChild; ch != nil; ch = ch.NextSibling {
-		text = append(text, getText(ch))
+		text += getText(ch)
 	}
-	return strings.Join(strings.Fields(strings.Join(text, " ")), " ")
+	return strings.Join(strings.Fields(text), " ")
 }
 
 func parse(node *html.Node) []Link {
 	if node == nil {
-		return []Link{}
+		return nil
 	}
 	var links []Link
 	for ch := node.FirstChild; ch != nil; ch = ch.NextSibling {
@@ -49,10 +49,12 @@ func parse(node *html.Node) []Link {
 				Text: getText(ch),
 			})
 		} else {
-			links = append(links, parse(ch)...)
+			tmpLinks := parse(ch)
+			if tmpLinks != nil {
+				links = append(links, parse(ch)...)
+			}
 		}
 	}
-
 	return links
 }
 
